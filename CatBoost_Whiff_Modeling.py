@@ -14,7 +14,7 @@ from catboost import CatBoostClassifier, Pool
 import optuna
 import random
 
-# queried data containing play-by-play data from 2021-2025
+# queried data containing play-by-play data from 2024 & 2025. Stripped down to features + target variable in model for storage reasons
 df = pl.read_parquet(r"seasons_df.parquet")
 
 #%%
@@ -232,4 +232,61 @@ df_whiff = (
     .sort(by = ['game_year', 'pred_whiff_pct'], descending = [True, True])
     )
 
-# there's the model!
+# there's the model and resulting summary data
+#%%
+# for fun let's plot the predicted output vs historical performance
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+xvar = "whiff_pct"
+yvar = "pred_whiff_pct"
+zvar = "pitch_tag"
+stat_sort = "whiff_pct"
+
+df_whiffs = df_whiff.filter((pl.col('swings') >= 200) & ~(pl.col('pitch_tag').is_in(['XX', 'KN'])))
+
+# weighted means for both variables
+x_mean = df_whiffs.with_columns(((pl.col(f'{xvar}') * pl.col('swings')).sum() / pl.col('swings').sum()).alias(f'weighted_{xvar}')).select(pl.col(f'weighted_{xvar}')).unique()
+y_mean = df_whiffs.with_columns(((pl.col(f'{yvar}') * pl.col('swings')).sum() / pl.col('swings').sum()).alias(f'weighted_{yvar}')).select(pl.col(f'weighted_{yvar}')).unique()
+
+df_whiffs = df_whiffs.to_pandas()
+
+x_mean = x_mean[0, 0]
+y_mean = y_mean[0, 0]
+
+plt.figure(figsize=(12, 12))
+
+ax = sns.scatterplot(
+    data=df_whiffs,
+    x=xvar,
+    y=yvar,
+    hue=zvar,
+    palette="Paired", # categorical variable palette from seaborn 
+    s=70,
+    alpha=0.5,
+    edgecolor="none",
+    legend = True
+)
+
+fig = ax.get_figure()
+
+
+# --- Add mean lines ---
+ax.axvline(x=x_mean, color="gray", linestyle="--", linewidth=1)
+ax.axhline(y=y_mean, color="gray", linestyle="--", linewidth=1)
+
+# grabbing the 5 best whiff pitches from each class of pitch and labeling them
+top_pitchers = df_whiffs.groupby('pitch_tag', group_keys = False).apply(lambda g: g.nlargest(5, stat_sort))
+
+# Add names, pitch types, and season as text labels
+for _, row in top_pitchers.iterrows():
+    plt.text(
+        row[xvar],
+        row[yvar],
+        f"{row['pitcher_name']} {row['pitch_tag']} ({int(row['game_year'])})",
+        fontsize=9,
+        alpha=0.8
+    )    
+
+plt.show()
+
