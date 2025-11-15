@@ -15,7 +15,7 @@ import optuna
 import random
 
 # queried data containing play-by-play data from 2024 & 2025. Stripped down to features + target variable in model for storage reasons
-df = pl.read_parquet(r"seasons_df.parquet")
+df = pl.read_parquet(r"feature_df.parquet")
 
 #%%
 # ========================================
